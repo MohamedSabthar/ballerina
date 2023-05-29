@@ -11,9 +11,9 @@ enum CakeKind {
 }
 
 const map<int> MENU = {
-    "Butter Cake" : 15,
-    "Chocolate Cake" : 20,
-    "Tres Leches" : 25
+    "Butter Cake": 15,
+    "Chocolate Cake": 20,
+    "Tres Leches": 25
 };
 
 enum OrderStatus {
@@ -55,13 +55,8 @@ service on new http:Listener(port) {
 
         string orderId = check generateOrderId();
 
-        lock {
-            orders[orderId] = newOrder;
-        }
-
-        lock {
-            orderStatus[orderId] = PENDING;
-        }
+        orders[orderId] = newOrder;
+        orderStatus[orderId] = PENDING;
 
         return <http:Created>{
             body: {order_id: orderId, total},
@@ -85,40 +80,29 @@ service on new http:Listener(port) {
     resource function put 'order/[string orderId](@http:Payload OrderUpdate & readonly updatedOrder) returns http:Ok|http:BadRequest|http:Forbidden|http:NotFound {
         final OrderDetail[] & readonly orderItems;
         final int total;
-
-        lock {
-            if !orderStatus.hasKey(orderId) {
-                return <http:NotFound>{};
-            }
-
-            if orderStatus.get(orderId) != PENDING {
-                return <http:Forbidden>{};
-            }
-
-            orderItems = updatedOrder.order_items;
-            int|(http:BadRequest & readonly) sumRes = computeSum(orderItems);
-
-            if sumRes is http:BadRequest {
-                return sumRes;
-            }
-
-            _ = orderStatus.remove(orderId);
-            total = sumRes;
+        if !orders.hasKey(orderId) {
+            return <http:NotFound>{};
         }
+
+        if orderStatus.get(orderId) != PENDING {
+            return <http:Forbidden>{};
+        }
+
+        orderItems = updatedOrder.order_items;
+        int|(http:BadRequest & readonly) sumRes = computeSum(orderItems);
+
+        if sumRes is http:BadRequest {
+            return sumRes;
+        }
+
+        _ = orderStatus.remove(orderId);
+        total = sumRes;
 
         string username;
-        lock {
-            Order existingOrder = orders.remove(orderId);
-            username = existingOrder.username;
-        }
-
-        lock {
-            orders[orderId] = {username, order_items: orderItems};
-        }
-
-        lock {
-            orderStatus[orderId] = PENDING;
-        }
+        Order existingOrder = orders.remove(orderId);
+        username = existingOrder.username;
+        orders[orderId] = {username, order_items: orderItems};
+        orderStatus[orderId] = PENDING;
 
         return <http:Ok>{
             body: {order_id: orderId, total},
@@ -137,23 +121,20 @@ service on new http:Listener(port) {
             }
             _ = orderStatus.remove(orderId);
         }
-
-        lock {
-            _ = orders.remove(orderId);
-        }
+        _ = orders.remove(orderId);
 
         return <http:Ok>{};
+
     }
+
 }
 
 function generateOrderId() returns string|error {
-    lock {
-        while true {
-            string orderId = (check random:createIntInRange(1, 100)).toString();
-        
-            if !orders.hasKey(orderId) {
-                return orderId;
-            }
+    while true {
+        string orderId = (check random:createIntInRange(1, 100)).toString();
+
+        if !orders.hasKey(orderId) {
+            return orderId;
         }
     }
 }
